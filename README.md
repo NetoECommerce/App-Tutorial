@@ -24,11 +24,15 @@ Before you begin this tutorial you should have a good understanding of the follo
 
 This tutorial will also setup a very basic store with Redis using Docker. While not necessary, it may help to have a basic understanding of Docker.
 
-You should also have an existing partner account with Neto with an existing sandbox store or have been given the ability to create sandbox stores by the Neto team.
+You should also have:
+
+- A partner account with Neto
+- A set of application keys (provided by the Neto team)
+- An existing sandbox store (or have been given the ability to create sandbox stores by the Neto team)
 
 ### Tools
 
-You will use a number of tools in this tutorial. You should be at least somewhat familiar with them in order to complete this tutorial.
+You will use a number of tools in this tutorial, you should be at least somewhat familiar with them in order to complete it.
 
 #### Node.js
 
@@ -247,6 +251,8 @@ router.get(
 router.get("/auth/success", (req, res) => {
   res.send("Successfully authenticated!");
 });
+
+module.exports = router;
 ```
 
 In the above we create a new Express `Router` and add a pair of routes to it. In the `/auth/callback` route we use the `passport` auth strategy that we defined earlier. We specify `session: false` because we are not using `passport` to cache user sessions in this context.
@@ -285,9 +291,9 @@ When your add-on is listed on Neto a merchant can have up to two methods of inst
 - You can redirect the user to the following URL to initiate the flow yourself:
   `https://apps.getneto.com/oauth/v2/auth?store_domain={store_domain}&client_id={client_id}&response_type=code&callback_uri={callback_uri}`
 
-For the purpose of this tutorial you can supply your sandbox store domain as the `store_domain` parameter, your client ID as the `client_id` parameter and `http://localhost:3000/auth/callback` as the `callback_uri` parameter.
+For the purpose of this tutorial you can supply your sandbox store domain as the `store_domain` parameter (this should just be the primary domain, e.g. mysandboxstore.neto.com.au), your client ID as the `client_id` parameter and `http://localhost:3000/auth/callback` as the `callback_uri` parameter.
 
-Go to the complete URI in your browser which should take you to the Neto application authorization page. Log into the store by selecting **Partner Account** and entering your parter login information.
+Fill in the parameters in the above URI and enter it into in your browser which should take you to the Neto application authorization page. Log into the store by selecting **Partner Account** and entering your partner login information.
 
 If everything has been setup correctly you should see `Successfully authenticated!` in the browser.
 
@@ -625,11 +631,13 @@ Save your new custom script. Go to your sandbox store's webstore and you should 
 When your add-on is listed this step can be completed automatically when your add-on is installed by a merchant. You may even want to request a number of values from the user to add to your custom script such as an API key or account number. These will be added into the custom fields in the script which can be accessed using the `[@referral_keyX@]` tag, replacing `X` with the corresponding value number (1-4).
 
 ## Get listed
+
 When you're confident your add-on is ready, notify our partner team. From there they will review your add-on with you and request the marketing assets for your add-on listing.
 
 The way you bill for your add-on should be discussed with the partner team, depending on your requirements.
 
 ## Complete
+
 Congratulations on completing this tutorial! You should have a basic understanding of what features are available to you as an add-on developer.
 
 Not all add-ons will contain all of these components; some may be very simple scripts that inject on a merchant's webstore whereas others may be an API connector which doesn't have any visible interface in Neto. If you have any questions about building an add-on, reach out to our partner team at any time.
