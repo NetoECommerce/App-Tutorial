@@ -2,13 +2,13 @@
 
 ## Introduction
 
-This tutorial will walk you through the process of building an add-on for Neto using Node.js, Redis and React. The add-on will be a simple widget that displays on a merchant's webstore that shows customers recently purchased products. This type of add-on is commonly called social proof.
+This tutorial will walk you through building an add-on for Neto using Node.js, Redis and React. The add-on will be a widget that displays on a merchant's webstore that shows recently purchased products. This type of add-on is commonly called social proof.
 
-While the add-on itself will be quite simple, this tutorial aims to show you what features are available to you as an add-on developer. At the end of this tutorial you will have built a functional add-on that runs in a local environment. In this tutorial you will:
+While the add-on itself will be quite simple, this tutorial aims to show you features and techniques that are available to you as an add-on developer. At the end of this tutorial you will have built a functional add-on that runs in a local environment. In this tutorial you will set up:
 
-- Setup a back-end in Node.js that can complete the OAuth handshake with Neto and can handle order history requests
-- Setup a Redis store with Docker
-- Setup a front-end widget in React that injects itself into a merchant's webstore
+- A back-end in Node.js that can complete the OAuth handshake with Neto and can handle order history requests.
+- A Redis store with Docker.
+- A front-end widget in React that injects itself into a merchant's webstore.
 
 Note that while this add-on is functional you should not use it as a perfect example of a production optimised add-on.
 
@@ -16,23 +16,19 @@ If you would prefer to jump ahead to the code you can see the completed code on 
 
 ### Requirements
 
-Before you begin this tutorial you should have a good understanding of the following concepts:
+To complete this tutorial you should have a good understanding of:
 
 - Command line and text editor tools
 - HTML, CSS and Javascript
 - NPM and packages
 
-This tutorial will also setup a very basic store with Redis using Docker. While not necessary, it may help to have a basic understanding of Docker.
+This tutorial will also set up a very basic store with Redis using Docker. While not necessary, it may help to have a basic understanding of Docker.
 
-You should also have:
-
-- A partner account with Neto
-- A set of application keys (provided by the Neto team)
-- An existing sandbox store (or have been given the ability to create sandbox stores by the Neto team)
+You should also have an existing partner account with Neto and an existing sandbox store, or the ability to create sandbox stores given by the Neto team.
 
 ### Tools
 
-You will use a number of tools in this tutorial, you should be at least somewhat familiar with them in order to complete it.
+You will use a number of tools in this tutorial. You should be at least somewhat familiar with them in order to complete this tutorial.
 
 #### Node.js
 
@@ -44,19 +40,19 @@ Redis is a simple, open-source key / value store. You'll use it to cache request
 
 #### Docker
 
-Docker is an open source tool designed to make it easier to create, deploy, and run applications by using containers. You'll use it to quickly setup your Redis store.
+Docker is an open source tool designed to make it easier to create, deploy, and run applications by using containers. You'll use it to quickly set up your Redis store.
 
 #### React
 
 React is a JavaScript library for building component-based user interfaces. You'll use it to create the widget that displays on the front-end.
 
-## Setup the back-end
+## Set up the back-end
 
 We'll start the tutorial by setting up the back-end of the add-on.
 
 ### Install Node.js
 
-Download and install the latest stable version of Node.js.
+Download and install the latest stable version of [Node.js.](https://nodejs.org/en/download/)
 
 You can check the installation by running the following in your command line:
 
@@ -68,7 +64,7 @@ Make sure that the version you have installed is at least 8.10 or later.
 
 ### Install Docker
 
-Download and install Docker Desktop.
+Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop).
 
 You can check the installation by running the following in your command line:
 
@@ -90,7 +86,7 @@ Navigate to your new folder:
 cd addon-back-end
 ```
 
-### Initialize project and add dependencies
+### Initialise project and add dependencies
 
 Node.js includes a package manager tool called `npm` which makes it easier to install and manage packages that you'll use in the add-on. Create a new `package.json` file by running the following:
 
@@ -144,9 +140,9 @@ module.exports = {
 
 We wrap the `get` and `set` methods of the Redis client with the `util.promisify` function which allows us to leverage promises in our code.
 
-### Setup application keys
+### Set up application keys
 
-When your partner account is setup and your add-on has been approved, the Neto team will provide you with a client ID and a client secret key. Your secret key should be kept private and you do not want to store it in your code, instead we'll use them as environment variables that are available when your code runs.
+When your partner account is set up and your add-on has been approved, the Neto team will provide you with a client ID and a client secret key. Keep your secret key private, do not store it in your code. Instead, use them as environment variables that are available when the code runs.
 
 Create a new file called `.env` and add these values:
 
@@ -166,7 +162,7 @@ module.exports = {
 };
 ```
 
-### Setup Express server
+### Set up Express server
 
 Create a new file called `index.js`. This will serve as the entry point to your application. Add the following:
 
@@ -186,7 +182,7 @@ app.listen(3000, (err) => {
 
 ## Configure OAuth
 
-To make the OAuth process easy, you'll be using a package called `passport` which allows you to define auth strategies easily. Create a new file called `passport.js` and add the following:
+To make the OAuth process easy, you'll be using a package called `passport`. It lets you define auth strategies easily. Create a new file called `passport.js` and add the following:
 
 ```javascript
 const passport = require("passport");
@@ -222,7 +218,7 @@ passport.use(
 module.exports = passport;
 ```
 
-In `passport` we create a new OAuth2 strategy by:
+In `passport`, create a new OAuth2 strategy by:
 
 - Defining Neto's OAuth endpoints
 - Supplying your application keys
@@ -251,13 +247,11 @@ router.get(
 router.get("/auth/success", (req, res) => {
   res.send("Successfully authenticated!");
 });
-
-module.exports = router;
 ```
 
-In the above we create a new Express `Router` and add a pair of routes to it. In the `/auth/callback` route we use the `passport` auth strategy that we defined earlier. We specify `session: false` because we are not using `passport` to cache user sessions in this context.
+In the above create a new Express `Router` and add a pair of routes to it. In the `/auth/callback` route use the `passport` auth strategy that was defined earlier. Specify `session: false` because `passport` is not being used to cache user sessions in this context.
 
-If your application is able to receive an access token and store it in Redis, the user will be redirected to `/auth/success` where we send the user a simple success message to them know the add-on installed successfully.
+If your application is able to receive an access token and store it in Redis, the user will be redirected to `/auth/success`. Here we send the user a simple success message to them know the add-on installed successfully.
 
 Open your index.js file and add the following:
 
@@ -291,11 +285,11 @@ When your add-on is listed on Neto a merchant can have up to two methods of inst
 - You can redirect the user to the following URL to initiate the flow yourself:
   `https://apps.getneto.com/oauth/v2/auth?store_domain={store_domain}&client_id={client_id}&response_type=code&callback_uri={callback_uri}`
 
-For the purpose of this tutorial you can supply your sandbox store domain as the `store_domain` parameter (this should just be the primary domain, e.g. mysandboxstore.neto.com.au), your client ID as the `client_id` parameter and `http://localhost:3000/auth/callback` as the `callback_uri` parameter.
+For the purpose of this tutorial you can supply your sandbox store domain as the `store_domain` parameter, your client ID as the `client_id` parameter and `http://localhost:3000/auth/callback` as the `callback_uri` parameter.
 
-Fill in the parameters in the above URI and enter it into in your browser which should take you to the Neto application authorization page. Log into the store by selecting **Partner Account** and entering your partner login information.
+Go to the complete URI in your browser which should take you to the Neto application authorisation page. Log into the store by selecting **Partner Account** and entering your parter login information.
 
-If everything has been setup correctly you should see `Successfully authenticated!` in the browser.
+If everything has been set up correctly you should see `Successfully authenticated!` in the browser.
 
 ## Fetch data from Neto
 
@@ -343,7 +337,7 @@ module.exports = {
 };
 ```
 
-We're creating two functions in this file, one to fetch orders from Neto's API that were placecd in the last day and another to remove personal information from the orders and return only the information you need for the widget. To authenticate with Neto's API we supply the `X_ACCESS_KEY` and `X_SECRET_KEY` tokens which are your client ID and access token for the merchant's store, respectively.
+We're creating two functions in this file, one to fetch orders from Neto's API that were placecd in the last day, and another to remove personal information from the orders and return only the information you need for the widget. To authenticate with Neto's API we supply the `X_ACCESS_KEY` and `X_SECRET_KEY` tokens which are your client ID and access token for the merchant's store, respectively.
 
 Open the `routes.js` file and add the following:
 
@@ -401,9 +395,9 @@ module.exports = router;
 
 In the above we're setting up a route at `/history` and returning orders that we're fetching from the Neto API.
 
-For the purpose of this tutorial we simply check the origin of the request to determine what store the orders need to be retrieved for. In a production environment you should opt for a more secure method of determining what orders to return.
+For the purpose of this tutorial we simply check the origin of the request to determine what store the orders need to be retrieved from. In a production environment you should opt for a more secure method of determining which orders to return.
 
-We use Redis to cache the orders fetched from the Neto API for a day to limit the number of requests the add-on is making to the API. You should review our best practices to understand what measures you should be taking at minimum.
+We use Redis to cache the orders fetched from the Neto API for a day to limit the number of requests the add-on is making to the API. You should review our best practices to understand what measures to take to comply.
 
 Open your sandbox store in your browser. Open the console in developer tools and run the following:
 
@@ -415,9 +409,9 @@ fetch("http://localhost:3000/history")
 
 Shortly after you should see an array of orders returned.
 
-## Setup the front-end
+## Set up the front-end
 
-You'll use `create-react-app` to quickly setup a widget that can be rendered on your sandbox store. Navigate out of your back-end project folder and run the following:
+We'll use `create-react-app` to quickly setup a widget that can be rendered on your sandbox store. Navigate out of your back-end project folder and run the following:
 
 ```bash
 npx create-react-app addon-front-end
@@ -459,7 +453,7 @@ Open your `package.json` file and add the following:
 }
 ```
 
-What this does is tell create-react-app that you only want a single file when you build your widget.
+This tells `create-react-app` that you only want a single file when you build your widget.
 
 ## Build your widget
 
@@ -520,7 +514,7 @@ Let's break down what happens here:
 4. Finally, we render a small widget if there is an active order that says:
    > Someone in **{city}** bought **{name}**!
 
-Add the following to this file to provide some styling and an additional message which displays the elapsed time since the order was placed:
+Add the below to this file to provide some styling and an additional message which displays the elapsed time since the order was placed:
 
 ```diff
 import React, { useEffect, useState } from "react";
@@ -598,9 +592,9 @@ npm run build
 
 This will create a new folder in your widget's project directory called build. Navigate to `build/static/*.*.js`, this is your widget's bundle file which can be used as a custom script in Neto.
 
-In a production scenario you would want to upload this script on your own infrastructure, most likely on a CDN. For this tutorial we'll upload it to your sandbox store's theme folder. Use the following guide to connect to your sandbox store's FTP directory. Navigate to `httpdocs/assets/themes/{your_theme}/js` and add your bundle file and rename it to `tutorial.min.js`.
+In a production scenario you would upload this script on your own infrastructure, most likely on a CDN. For this tutorial we'll upload it to your sandbox store's theme folder. Use the following guide to connect to your sandbox store's FTP directory. Navigate to `httpdocs/assets/themes/{your_theme}/js` and add your bundle file and rename it to `tutorial.min.js`.
 
-Log into your sandbox store's control panel and go to Settings and Tools > All Settings and Tools > Custom Scripts. Add a new custom script. Click on the Page Footer tab and add the following:
+Log into your sandbox store's control panel and go to **Settings & tools** > **All settings & tools** > **Custom Scripts**. Add a new custom script. Click on the Page Footer tab and add the following:
 
 ```html
 <div id="root"></div>
@@ -611,7 +605,7 @@ Log into your sandbox store's control panel and go to Settings and Tools > All S
 ></script>
 ```
 
-Note that you can make use of Neto's B@se templating language within a custom script. This is useful for accessing server-side variables in your script which can be accessed by passing them through the window object:
+Note that you can make use of Neto's B@SE template language in a custom script. This is useful for accessing server-side variables in your script which can be accessed by passing them through the window object:
 
 ```html
 <div id="root"></div>
@@ -631,13 +625,11 @@ Save your new custom script. Go to your sandbox store's webstore and you should 
 When your add-on is listed this step can be completed automatically when your add-on is installed by a merchant. You may even want to request a number of values from the user to add to your custom script such as an API key or account number. These will be added into the custom fields in the script which can be accessed using the `[@referral_keyX@]` tag, replacing `X` with the corresponding value number (1-4).
 
 ## Get listed
-
 When you're confident your add-on is ready, notify our partner team. From there they will review your add-on with you and request the marketing assets for your add-on listing.
 
 The way you bill for your add-on should be discussed with the partner team, depending on your requirements.
 
 ## Complete
-
 Congratulations on completing this tutorial! You should have a basic understanding of what features are available to you as an add-on developer.
 
 Not all add-ons will contain all of these components; some may be very simple scripts that inject on a merchant's webstore whereas others may be an API connector which doesn't have any visible interface in Neto. If you have any questions about building an add-on, reach out to our partner team at any time.
