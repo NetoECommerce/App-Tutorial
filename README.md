@@ -1,5 +1,9 @@
 # Build an add-on for Neto using Node.js, Redis and React
 
+> Note: Neto does not require add-ons be developed using a particular tech stack. As long as your backend can make requests to the Neto App URLs and complete the required OAuth flow your application can be built using whatever technology you or your team are most familiar with.
+>
+> The following guide is meant as an example only, it is not production ready and should not be used in a production environment. When building your application ensure all OAuth Keys and merchant/customer data is securely stored.
+
 ## Introduction
 
 This tutorial will walk you through building an add-on for Neto using Node.js, Redis and React. The add-on will be a widget that displays on a merchant's webstore that shows recently purchased products. This type of add-on is commonly called social proof.
@@ -48,7 +52,17 @@ React is a JavaScript library for building component-based user interfaces. You'
 
 ## Set up the back-end
 
-We'll start the tutorial by setting up the back-end of the add-on.
+We'll start the tutorial by setting up the back-end of the add-on. This tutorial has been tested using the following dependencies and may not work as expected if your code uses anything newer:
+
+- node v20.9.0 (npm v10.1.0)
+- body-parser v1.20.2
+- cors v2.8.5
+- dotenv v16.4.5
+- express v4.19.2
+- passport v0.7.0
+- passport-oauth2 v1.8.0
+- redis v4.6.14
+
 
 ### Install Node.js
 
@@ -99,7 +113,7 @@ The `package.json` file defines your project.
 Install your dependencies:
 
 ```bash
-npm install --save body-parser cors dotenv express passport passport-oauth2 redis axios
+npm install --save body-parser cors dotenv express passport passport-oauth2 redis
 ```
 
 ### Configure Redis
@@ -107,15 +121,16 @@ npm install --save body-parser cors dotenv express passport passport-oauth2 redi
 Docker makes it easy to quickly start a redis store locally. Create a new file called `docker-compose.yml`. Open the file and add the following:
 
 ```yml
-version: "3"
+version: '3'
 services:
   redis:
     image: redis:latest
+    container_name: cache
     ports:
       - 6379:6379
 ```
 
-Here we're defining a single container that:
+Here we're defining a single container called `cache` that:
 
 - Uses the latest official image provided by Redis
 - Exposes the default port that Redis uses to your local environment
@@ -124,25 +139,39 @@ To start Redis run the following command:
 
 `docker-compose up -d`
 
+Note, if the above command or any of the commands outlined in this tutorial fail, close your command terminal, reopen it, and run the command again. Some of the file changes we are making will not update in the application without a "reset" - this might be the whole terminal, or just stopping the current running process, and running it again.
+
 To interact with Redis in your code you'll use the redis package. Create a new file called `redis.js` and add the following:
 
 ```javascript
-const redis = require("redis");
-const util = require("util");
+const { createClient } = require('redis');
+const client = createClient();
 
-const client = redis.createClient();
+const setClient = async (key, value) => {
+    await client.set(key, value);
+}
+const getClient = async (key) => {
+    const value = await client.get(key);
+    return value;
+}
+
+(async () => {
+    await client.connect();
+})();
+
+client.on('error', err => console.log('Redis Client Error', err));
 
 module.exports = {
-  getAsync: util.promisify(client.get).bind(client),
-  setAsync: util.promisify(client.set).bind(client),
+    setClient,
+    getClient
 };
 ```
 
-We wrap the `get` and `set` methods of the Redis client with the `util.promisify` function which allows us to leverage promises in our code.
+Here we are creating a new Redis Client and starting a connection. We also provide helper functions for the Clients GET and SET commands which allows us to leverage these later in our code.
 
 ### Set up application keys
 
-When your partner account is set up and your add-on has been approved, the Neto team will provide you with a client ID and a client secret key. Keep your secret key private, do not store it in your code. Instead, use them as environment variables that are available when the code runs.
+When your partner account is set up and your add-on has been approved, the Neto team will provide you with a Client ID and a Client Secret Key. Keep your credentials private, do not store these in your code. Instead, use them as environment variables that are available when the code runs.
 
 Create a new file called `.env` and add these values:
 
@@ -158,7 +187,7 @@ require("dotenv").config();
 
 module.exports = {
   CLIENT_ID: process.env.CLIENT_ID,
-  CLIENT_SECRET: process.env.CLIENT_SECRET,
+  CLIENT_SECRET: process.env.CLIENT_SECRET
 };
 ```
 
@@ -167,16 +196,16 @@ module.exports = {
 Create a new file called `index.js`. This will serve as the entry point to your application. Add the following:
 
 ```javascript
-const express = require("express");
+const express = require('express');
 
 const app = express();
 
-app.use(require("cors")());
-app.use(require("body-parser").urlencoded({ extended: true }));
+app.use(require('cors')());
+app.use(require('body-parser').urlencoded({ extended: true }));
 
 app.listen(3000, (err) => {
   if (err) throw err;
-  console.log("Listening on http://localhost:3000");
+  console.log(`Listening on http://localhost:3000`);
 });
 ```
 
@@ -185,20 +214,20 @@ app.listen(3000, (err) => {
 To make the OAuth process easy, you'll be using a package called `passport`. It lets you define auth strategies easily. Create a new file called `passport.js` and add the following:
 
 ```javascript
-const passport = require("passport");
-const OAuth2Strategy = require("passport-oauth2");
-const { setAsync } = require("./redis");
-const config = require("./config");
+const passport = require('passport');
+const OAuth2Strategy = require('passport-oauth2');
+const client = require('./redis');
+const config = require('./config');
 
 passport.use(
-  "neto",
+  'neto',
   new OAuth2Strategy(
     {
-      authorizationURL: "https://apps.getneto.com/oauth/v2/auth",
-      tokenURL: "https://apps.getneto.com/oauth/v2/token",
+      authorizationURL: 'https://apps.getneto.com/oauth/v2/auth',
+      tokenURL: 'https://apps.getneto.com/oauth/v2/token',
       clientID: config.CLIENT_ID,
       clientSecret: config.CLIENT_SECRET,
-      callbackURL: "http://localhost:3000/auth/callback",
+      callbackURL: 'http://localhost:3000/auth/callback',
       passReqToCallback: true,
     },
     async (
@@ -209,7 +238,7 @@ passport.use(
       info,
       callback
     ) => {
-      setAsync(`${store_domain}#token`, accessToken);
+      client.setClient(`${store_domain}#token`, accessToken);
       callback(null, {});
     }
   )
@@ -218,62 +247,67 @@ passport.use(
 module.exports = passport;
 ```
 
-In `passport`, create a new OAuth2 strategy by:
+In `passport`, we are creating a new OAuth2 strategy by:
 
 - Defining Neto's OAuth endpoints
-- Supplying your application keys
+- Supplying your application credentials
 - Defining your callback URL
+
+Please note, for the purposes of this tutorial, we are using the callback URL: `http://localhost:3000/auth/callback`. If you have requested a different callback URL you will need to update this in the above code and anywhere else `/auth/callback` is referenced in this tutorial.
 
 The second argument to the auth strategy is a function where you can process the access token that you received from Neto. For this tutorial you'll simply be storing the access token in the Redis cache using the store domain as the key.
 
 You'll need to define some routes in your application to use this auth strategy. Create a new file called `routes.js` and add the following:
 
 ```javascript
-const express = require("express");
-const passport = require("passport");
+const express = require('express');
+const passport = require('passport');
 
 const router = express.Router();
 
 router.get(
-  "/auth/callback",
-  passport.authenticate("neto", {
+  '/auth/callback',
+  passport.authenticate('neto', {
     session: false,
   }),
   (_req, res) => {
-    res.redirect("/auth/success");
+    res.redirect('/auth/success');
   }
 );
 
-router.get("/auth/success", (req, res) => {
-  res.send("Successfully authenticated!");
+router.get('/auth/success', (req, res) => {
+  res.send('Successfully authenticated!');
 });
+
+module.exports = router;
 ```
 
-In the above create a new Express `Router` and add a pair of routes to it. In the `/auth/callback` route use the `passport` auth strategy that was defined earlier. Specify `session: false` because `passport` is not being used to cache user sessions in this context.
+In the above code we create a new Express `Router` and add a pair of routes to it. In the `/auth/callback` route we use the `passport` auth strategy that was defined earlier. Specify `session: false` because `passport` is not being used to cache user sessions in this context.
 
 If your application is able to receive an access token and store it in Redis, the user will be redirected to `/auth/success`. Here we send the user a simple success message to them know the add-on installed successfully.
 
 Open your index.js file and add the following:
 
 ```diff
-const express = require('express')
-+ const routes = require("./routes")
-+ const passport = require("./passport")
+const express = require('express');
++ const routes = require('./routes');
++ const passport = require('./passport');
 
 const app = express();
 
-app.use(require('cors')())
+app.use(require('cors')());
 app.use(require('body-parser').urlencoded({ extended: true }));
-+ app.use(passport.initialize())
-+ app.use(routes)
++ app.use(passport.initialize());
++ app.use(routes);
 
 app.listen(3000, (err) => {
   if (err) throw err;
-  console.log("Listening on http://localhost:3000");
+  console.log(`Listening on http://localhost:3000`);
 });
+
 ```
 
-You can start the application by running `node index.js` in the command line. You should see the following if the application is running successfully:
+You can now start the application by running `node index.js` in the command line. You should see the following in the command line if the application is running successfully:
 
 ```
 Listening on http://localhost:3000
@@ -283,43 +317,49 @@ When your add-on is listed on Neto a merchant can have up to two methods of inst
 
 - The user can discover your add-on in their Neto control panel and install it from there which will begin the OAuth flow.
 - You can redirect the user to the following URL to initiate the flow yourself:
-  `https://apps.getneto.com/oauth/v2/auth?store_domain={store_domain}&client_id={client_id}&response_type=code&callback_uri={callback_uri}`
+  `https://apps.getneto.com/oauth/v2/auth?store_domain={store_domain}&client_id={client_id}&response_type=code&redirect_uri={callback_uri}`
 
-For the purpose of this tutorial you can supply your sandbox store domain as the `store_domain` parameter, your client ID as the `client_id` parameter and `http://localhost:3000/auth/callback` as the `callback_uri` parameter.
+For the purpose of this tutorial, supply your sandbox store domain without the HTTP protocol as the `store_domain` parameter, your Client ID as the `client_id` parameter and your specified callback URL e.g. `http://localhost:3000/auth/callback` as the `redirect_uri` parameter.
 
-Go to the complete URI in your browser which should take you to the Neto application authorisation page. Log into the store by selecting **Partner Account** and entering your parter login information.
+Go to the complete URI in your browser which should take you to the Neto application authorisation portal. Log into the portal using an Admin level staff user on your sandbox store.
 
-If everything has been set up correctly you should see `Successfully authenticated!` in the browser.
+If everything has been set up correctly you should be redirected back to your localhost and see `Successfully authenticated!` in the browser.
 
 ## Fetch data from Neto
 
 Now that you are able to receive and store access information for each merchant you can start making requests to Neto's API. Create a new file called `neto.js` and add the following:
 
 ```javascript
-const axios = require("axios");
-const config = require("./config");
+const config = require('./config');
 
-const getOrders = (store_domain, secret) => {
-  return axios.post({
-    url: `https://${store_domain}/do/WS/NetoAPI`,
-    responseType: "json",
-    headers: {
-      X_ACCESS_KEY: config.CLIENT_ID,
-      X_SECRET_KEY: secret,
-      NETOAPI_ACTION: "GetOrder",
-    },
-    body: {
-      Filter: {
-        DatePlacedFrom: new Date(Date.now() - 86400000).toISOString(),
-        OutputSelector: [
-          "OrderLine",
-          "OrderLine.ProductName",
-          "BillAddress",
-          "DatePlaced",
-        ],
+const getOrders = async (store_domain, secret) => {
+  try {
+    const res = await fetch(`https://${store_domain}/do/WS/NetoAPI`, {
+      method: 'POST',
+      headers: {
+        X_ACCESS_KEY: config.CLIENT_ID,
+        X_SECRET_KEY: secret,
+        NETOAPI_ACTION: 'GetOrder',
+        Accept: 'application/json',
       },
-    },
-  });
+      body: `{
+              "Filter": {
+                "DatePlacedFrom": "${new Date(Date.now() - 86400000).toISOString()}",
+                "OutputSelector": [
+                  "OrderLine",
+                  "OrderLine.ProductName",
+                  "BillAddress",
+                  "DatePlaced"
+                ]
+              }
+            }`,
+    });
+
+    orders = await res.json();
+    return orders;
+  } catch (e) {
+    return `Fetch Error. ${e}`;
+  }
 };
 
 const mapOrders = (orders) => {
@@ -333,73 +373,67 @@ const mapOrders = (orders) => {
 
 module.exports = {
   mapOrders,
-  getOrders,
+  getOrders
 };
 ```
 
-We're creating two functions in this file, one to fetch orders from Neto's API that were placecd in the last day, and another to remove personal information from the orders and return only the information you need for the widget. To authenticate with Neto's API we supply the `X_ACCESS_KEY` and `X_SECRET_KEY` tokens which are your client ID and access token for the merchant's store, respectively.
+We're creating two functions in this file, one to fetch orders from Neto's API that were placecd in the last day, and another to remove personal information from the orders and return only the information you need for the widget. To authenticate with Neto's API we supply the `X_ACCESS_KEY` and `X_SECRET_KEY` tokens which are your Client ID and Access Token for the merchant's store, respectively.
 
 Open the `routes.js` file and add the following:
 
 ```diff
-const express = require("express");
-const passport = require("passport");
-+ const { getAsync, setAsync } = require("./redis");
-+ const { getOrders, mapOrders } = require("./neto");
+const express = require('express');
+const passport = require('passport');
++ const client = require('./redis');
++ const { getOrders, mapOrders } = require('./neto');
 
 const router = express.Router();
 
 router.get(
-  "/auth/callback",
-  passport.authenticate("neto", {
+  '/auth/callback',
+  passport.authenticate('neto', {
     session: false,
   }),
   (_req, res) => {
-    res.redirect("/auth/success");
+    res.redirect('/auth/success');
   }
 );
 
-router.get("/auth/success", (req, res) => {
-  res.send("Successfully authenticated!");
+router.get('/auth/success', (req, res) => {
+  res.send('Successfully authenticated!');
 });
 
-+ router.get("/history", async (req, res) => {
-+ const store_domain = req.get("Origin").replace("https://", "");
++ router.get('/history', async (req, res) => {
++     const store_domain = req.get('Origin').replace('https://', '');
++     const expiryDate = await client.getClient(`${store_domain}#expiry`);
 +
-+  const expiryDate = await getAsync(`${store_domain}#expiry`);
-+
-+  // serve new orders
-+  if (new Date() > new Date(expiryDate || 0)) {
-+    const secret = await getAsync(`${store_domain}#token`);
-+    const json = await getOrders(store_domain, secret);
-+    const orders = mapOrders(json.Order);
-+    res.json(orders);
-+    await Promise.all([
-+      setAsync(
-+        `${store_domain}#expiry`,
-+        new Date(Date.now() + 5184000000).toISOString()
-+      ),
-+      setAsync(`${store_domain}#orders`, JSON.stringify(orders)),
-+    ]);
-+  }
-+  // serve cached orders
-+  else {
-+    const json = await getAsync(`${store_domain}#orders`);
-+    const orders = JSON.parse(json);
-+    res.json(orders);
-+  }
-+});
++     // serve new orders
++     if (new Date() > new Date(expiryDate || 0)) {
++         const secret = await client.getClient(`${store_domain}#token`);
++         const json = await getOrders(store_domain, secret);
++         const orders = mapOrders(json.Order);
++         res.json(orders);
++         await client.setClient(`${store_domain}#expiry`, new Date(Date.now() + 5184000000).toISOString());
++         await client.setClient(`${store_domain}#orders`, JSON.stringify(orders));
++     }
++     // serve cached orders
++     else {
++         const json = await client.getClient(`${store_domain}#orders`);
++         const orders = JSON.parse(json);
++         res.json(orders);
++     }
++ });
 
 module.exports = router;
 ```
 
-In the above we're setting up a route at `/history` and returning orders that we're fetching from the Neto API.
+In the above code we're setting up a new route at `/history` and returning orders that we're fetching from the Neto API.
 
-For the purpose of this tutorial we simply check the origin of the request to determine what store the orders need to be retrieved from. In a production environment you should opt for a more secure method of determining which orders to return.
+For the purpose of this tutorial we simply check the origin of the request to determine what store the orders need to be retrieved from. In a production environment you would likely be polling for data using the store_domain provided by the OAuth handshake, not waiting for a webstore to send your application data. In either case, you should opt for a more secure method of determining which store orders to return.
 
 We use Redis to cache the orders fetched from the Neto API for a day to limit the number of requests the add-on is making to the API. You should review our best practices to understand what measures to take to comply.
 
-Open your sandbox store in your browser. Open the console in developer tools and run the following:
+In your addon-back-end terminal, close and restart the `node index.js` command then open your sandbox store in your browser. Open the browser console in developer tools and run the following:
 
 ```
 fetch("http://localhost:3000/history")
@@ -409,9 +443,14 @@ fetch("http://localhost:3000/history")
 
 Shortly after you should see an array of orders returned.
 
+Your applications backend is now setup and handles the Neto OAuth handshake as well as polling for data via the Neto API. At this point you could expand on the backend code y adding additional routes, API calls, etc. For this tutorial we will keep things simple and move onto the frontend of our application.
+
+
 ## Set up the front-end
 
-We'll use `create-react-app` to quickly setup a widget that can be rendered on your sandbox store. Navigate out of your back-end project folder and run the following:
+We'll use `create-react-app` to quickly setup a widget that can be rendered on your sandbox store. This tool was deprecated in 2023, but works fine for this tutorial. In a production environment you should consider generating a React App using [Vite](https://vitejs.dev/) or [Next.js](https://nextjs.org/). 
+
+Navigate out of your back-end project folder and run the following:
 
 ```bash
 npx create-react-app addon-front-end
@@ -437,7 +476,7 @@ module.exports = function override(config) {
 };
 ```
 
-Open your `package.json` file and add the following:
+Open your `package.json` file and replace the "build" script command with the following:
 
 ```diff
 {
@@ -592,9 +631,9 @@ npm run build
 
 This will create a new folder in your widget's project directory called build. Navigate to `build/static/*.*.js`, this is your widget's bundle file which can be used as a custom script in Neto.
 
-In a production scenario you would upload this script on your own infrastructure, most likely on a CDN. For this tutorial we'll upload it to your sandbox store's theme folder. Use the following guide to connect to your sandbox store's FTP directory. Navigate to `httpdocs/assets/themes/{your_theme}/js` and add your bundle file and rename it to `tutorial.min.js`.
+In a production scenario you would upload this script on your own infrastructure, most likely on a CDN. For this tutorial we'll upload it straight to your sandbox store's theme folder. Use the [following guide](https://developers.maropost.com/documentation/neto-designer-documentation/news-and-tips/how-to-connect-to-neto-via-ftp/) to connect to your sandbox store's FTP directory. Navigate to `httpdocs/assets/themes/{your_theme}/js` and add your bundle file, renaming it to `tutorial.min.js`.
 
-Log into your sandbox store's control panel and go to **Settings & tools** > **All settings & tools** > **Custom Scripts**. Add a new custom script. Click on the Page Footer tab and add the following:
+Log into your sandbox store's control panel and go to **Settings & tools** > **All settings & tools** > **Custom Scripts**. Add a new custom script. Click on the `Page Footer` tab and add the following:
 
 ```html
 <div id="root"></div>
@@ -620,14 +659,12 @@ Note that you can make use of Neto's B@SE template language in a custom script. 
 ></script>
 ```
 
-Save your new custom script. Go to your sandbox store's webstore and you should see your add-ons widget.
+Save your new custom script. Ensure your backend is still running, then go to your sandbox store's webstore and you should see your add-on widget.
 
-When your add-on is listed this step can be completed automatically when your add-on is installed by a merchant. You may even want to request a number of values from the user to add to your custom script such as an API key or account number. These will be added into the custom fields in the script which can be accessed using the `[@referral_keyX@]` tag, replacing `X` with the corresponding value number (1-4).
+When your add-on is officially listed on the Neto platform custom scripts can be added automatically when your add-on is installed by a merchant. You may even want to request a number of values from the user to add to your custom script such as an API key or account number. These will be added into the custom fields in the script which can be accessed using the `[@referral_keyX@]` tag, replacing `X` with the corresponding value number (1-4).
 
 ## Get listed
-When you're confident your add-on is ready, notify our partner team. From there they will review your add-on with you and request the marketing assets for your add-on listing.
-
-The way you bill for your add-on should be discussed with the partner team, depending on your requirements.
+Looking to build out an official Neto add-on? Reach out to our [Partner Team](https://partner.maropost.com/commerce-cloud/technology-partner/) first so we can discuss your requirements. 
 
 ## Complete
 Congratulations on completing this tutorial! You should have a basic understanding of what features are available to you as an add-on developer.
